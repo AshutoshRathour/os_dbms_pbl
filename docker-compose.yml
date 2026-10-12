@@ -1,0 +1,117 @@
+# Cloud Resource & Job Scheduling System
+# Docker Compose configuration
+
+services:
+  # ─── MySQL Database ────────────────────────────────────────────
+  db:
+    image: mysql:8.0
+    container_name: cloud-scheduler-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-changeme_root_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-cloud_scheduler}
+      MYSQL_USER: ${MYSQL_USER:-cloudscheduler}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme_db_password}
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    networks:
+      - cloud-net
+
+  # ─── Flask Web Application ────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cloud-scheduler-web
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      FLASK_ENV: development
+      PYTHONUNBUFFERED: "1"
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-cloudscheduler}:${MYSQL_PASSWORD:-changeme_db_password}@db:3306/${MYSQL_DATABASE:-cloud_scheduler}
+      MYSQL_HOST: db
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${MYSQL_USER:-cloudscheduler}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme_db_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-cloud_scheduler}
+    depends_on:
+      db:
+        condition: service_healthy
+      init:
+        condition: service_completed_successfully
+    networks:
+      - cloud-net
+
+  # ─── Database Seeder (runs once) ──────────────────────────────
+  init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cloud-scheduler-init
+    command: python init_db.py
+    environment:
+      FLASK_ENV: development
+      PYTHONUNBUFFERED: "1"
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-cloudscheduler}:${MYSQL_PASSWORD:-changeme_db_password}@db:3306/${MYSQL_DATABASE:-cloud_scheduler}
+      MYSQL_HOST: db
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${MYSQL_USER:-cloudscheduler}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme_db_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-cloud_scheduler}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - cloud-net
+
+  # ─── Background Worker ────────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: cloud-scheduler-worker
+    restart: unless-stopped
+    environment:
+      FLASK_ENV: development
+      PYTHONUNBUFFERED: "1"
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-cloudscheduler}:${MYSQL_PASSWORD:-changeme_db_password}@db:3306/${MYSQL_DATABASE:-cloud_scheduler}
+      MYSQL_HOST: db
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${MYSQL_USER:-cloudscheduler}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme_db_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-cloud_scheduler}
+      WORKER_POLL_INTERVAL: ${WORKER_POLL_INTERVAL:-5}
+      WORKER_MAX_CONCURRENT: ${WORKER_MAX_CONCURRENT:-3}
+      CONTAINER_TIMEOUT: ${CONTAINER_TIMEOUT:-300}
+      CONTAINER_CLEANUP: ${CONTAINER_CLEANUP:-true}
+    volumes:
+      # Mount Docker socket so worker can create containers
+      # NOTE: This gives the worker access to Docker Engine.
+      #       Never expose this container or port to the public internet.
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      db:
+        condition: service_healthy
+      init:
+        condition: service_completed_successfully
+    networks:
+      - cloud-net
+
+volumes:
+  mysql_data:
+
+networks:
+  cloud-net:
+    name: cloud-scheduler-net
+    driver: bridge

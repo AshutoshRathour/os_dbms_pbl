@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}Job Queue & History - Cloud Resource & Job Scheduling System{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-lg-4 py-4">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+      <h2 class="fw-bold mb-1">Job Execution Queue</h2>
+      <p class="text-secondary small mb-0">Track all submitted cloud workloads, scheduled node assignments, and container statuses.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <button id="btn-refresh-jobs" class="btn btn-sm btn-outline-custom">
+        <i class="bi bi-arrow-clockwise"></i> Refresh
+      </button>
+      <a href="{{ url_for('main.submit_job_page') }}" class="btn btn-sm btn-primary-gradient">
+        <i class="bi bi-plus-circle me-1"></i> Submit Workload
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters Row -->
+  <div class="glass-card p-3 mb-4">
+    <div class="row g-2 align-items-center">
+      <!-- Status pill filters -->
+      <div class="col-lg-8">
+        <div class="d-flex flex-wrap gap-1" id="status-filter-pills">
+          <button class="btn btn-sm btn-outline-custom active" data-status="">All Jobs</button>
+          <button class="btn btn-sm btn-outline-custom" data-status="queued">Queued</button>
+          <button class="btn btn-sm btn-outline-custom" data-status="assigned">Assigned</button>
+          <button class="btn btn-sm btn-outline-custom" data-status="running">Running</button>
+          <button class="btn btn-sm btn-outline-custom" data-status="completed">Completed</button>
+          <button class="btn btn-sm btn-outline-custom" data-status="failed">Failed</button>
+        </div>
+      </div>
+
+      <!-- Search box -->
+      <div class="col-lg-4">
+        <div class="input-group input-group-sm">
+          <span class="input-group-text bg-dark border-secondary border-opacity-25 text-secondary">
+            <i class="bi bi-search"></i>
+          </span>
+          <input type="text" id="jobs-search-input" class="form-control bg-dark border-secondary border-opacity-25 text-light" placeholder="Search by Job ID or Workload...">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Jobs Table -->
+  <div class="glass-card p-4">
+    <div class="table-responsive">
+      <table class="table table-custom">
+        <thead>
+          <tr>
+            <th>Job ID</th>
+            <th>Workload</th>
+            <th>Priority</th>
+            <th>Status</th>
+            <th>Node</th>
+            <th>Resource Specs (Est)</th>
+            <th>Duration (Act vs Est)</th>
+            <th>Exit Code</th>
+            <th>Submitted At</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="jobs-table-tbody">
+          <tr>
+            <td colspan="10" class="text-center py-4 text-muted">
+              <div class="spinner-border spinner-border-sm text-primary me-2"></div> Loading jobs...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top border-secondary border-opacity-25">
+      <div class="text-secondary small" id="pagination-info">Showing jobs</div>
+      <div class="btn-group btn-group-sm" id="pagination-controls">
+        <button class="btn btn-outline-custom" id="btn-prev-page" disabled>Previous</button>
+        <button class="btn btn-outline-custom" id="btn-next-page" disabled>Next</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentPage = 1;
+let currentStatus = '';
+let currentSearch = '';
+let pollInterval = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadJobs();
+  setupListeners();
+  pollInterval = setInterval(loadJobs, 4000);
+});
+
+function setupListeners() {
+  document.getElementById('btn-refresh-jobs').addEventListener('click', () => {
+    loadJobs();
+    App.toast('Job list refreshed', 'info');
+  });
+
+  document.querySelectorAll('#status-filter-pills button').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      document.querySelectorAll('#status-filter-pills button').forEach(b => b.classList.remove('active'));
+      e.target.classList.add('active');
+      currentStatus = e.target.getAttribute('data-status');
+      currentPage = 1;
+      loadJobs();
+    });
+  });
+
+  const searchInput = document.getElementById('jobs-search-input');
+  searchInput.addEventListener('input', (e) => {
+    currentSearch = e.target.value.toLowerCase().trim();
+    loadJobs();
+  });
+
+  document.getElementById('btn-prev-page').addEventListener('click', () => {
+    if (currentPage > 1) {
+      currentPage--;
+      loadJobs();
+    }
+  });
+
+  document.getElementById('btn-next-page').addEventListener('click', () => {
+    currentPage++;
+    loadJobs();
+  });
+}
+
+async function loadJobs() {
+  try {
+    let url = `/api/jobs?page=${currentPage}&per_page=20`;
+    if (currentStatus) url += `&status=${currentStatus}`;
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Failed to load jobs');
+    const data = await res.json();
+    renderJobsTable(data);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function renderJobsTable(data) {
+  const tbody = document.getElementById('jobs-table-tbody');
+  let jobs = data.jobs || [];
+
+  if (currentSearch) {
+    jobs = jobs.filter(j => 
+      j.id.toString().includes(currentSearch) ||
+      (j.workload_name && j.workload_name.toLowerCase().includes(currentSearch))
+    );
+  }
+
+  if (jobs.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="10" class="text-center py-4 text-muted">
+          No workloads match the selected filter.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = jobs.map(job => {
+    const assignment = job.assignment;
+    const nodeName = assignment ? (assignment.node_name || 'Assigned') : '-';
+    
+    // Resource Specs
+    const specs = `<span class="small font-monospace">${job.est_cpu_cores} CPU &bull; ${job.est_memory_mb} MB</span>`;
+
+    // Duration Act vs Est
+    const estTime = `${job.est_time_seconds || '-'}s (Est)`;
+    const actTime = assignment && assignment.actual_duration_seconds !== null && assignment.actual_duration_seconds !== undefined
+      ? `<strong class="text-info">${assignment.actual_duration_seconds.toFixed(1)}s</strong> (Act)`
+      : '<span class="text-muted">-</span>';
+
+    // Exit code
+    let exitBadge = '<span class="text-muted">-</span>';
+    if (assignment && assignment.exit_code !== null && assignment.exit_code !== undefined) {
+      if (assignment.exit_code === 0) {
+        exitBadge = '<span class="badge bg-success-subtle text-success">Exit 0</span>';
+      } else {
+        exitBadge = `<span class="badge bg-danger-subtle text-danger">Exit ${assignment.exit_code}</span>`;
+      }
+    }
+
+    // Cancel action if queued
+    const cancelBtn = job.status === 'queued'
+      ? `<button class="btn btn-sm btn-outline-danger py-0 px-2 ms-1" onclick="cancelJob(${job.id})" title="Cancel Queued Job">
+           <i class="bi bi-x"></i>
+         </button>`
+      : '';
+
+    return `
+      <tr>
+        <td class="font-monospace fw-semibold text-light">#${job.id}</td>
+        <td>
+          <div class="fw-semibold text-light">${job.workload_name || 'Generic'}</div>
+          <div class="text-muted" style="font-size: 0.72rem;">${job.username || 'user'}</div>
+        </td>
+        <td>${App.renderPriorityBadge(job.priority)}</td>
+        <td>${App.renderStatusBadge(job.status)}</td>
+        <td><span class="badge bg-dark border border-secondary border-opacity-25 text-light">${nodeName}</span></td>
+        <td>${specs}</td>
+        <td>
+          <div class="small">${actTime}</div>
+          <div class="text-muted" style="font-size: 0.7rem;">${estTime}</div>
+        </td>
+        <td>${exitBadge}</td>
+        <td class="text-secondary small">${App.formatDate(job.created_at)}</td>
+        <td class="text-end text-nowrap">
+          <a href="/jobs/${job.id}" class="btn btn-sm btn-outline-custom py-1 px-2" title="Inspect Job Lifecycle">
+            <i class="bi bi-eye"></i> Details
+          </a>
+          ${cancelBtn}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  // Update pagination
+  const total = data.total || 0;
+  const pages = data.pages || 1;
+  document.getElementById('pagination-info').textContent = `Total ${total} jobs &bull; Page ${currentPage} of ${pages}`;
+  document.getElementById('btn-prev-page').disabled = currentPage <= 1;
+  document.getElementById('btn-next-page').disabled = currentPage >= pages;
+}
+
+async function cancelJob(jobId) {
+  if (!confirm(`Are you sure you want to cancel queued job #${jobId}?`)) return;
+  try {
+    const res = await fetch(`/api/jobs/${jobId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to cancel');
+    App.toast(`Job #${jobId} cancelled`, 'warning');
+    loadJobs();
+  } catch (err) {
+    App.toast(err.message, 'danger');
+  }
+}
+</script>
+{% endblock %}

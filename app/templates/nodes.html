@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}Computing Nodes - Cloud Resource & Job Scheduling System{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-lg-4 py-4">
+
+  <!-- Header -->
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+      <h2 class="fw-bold mb-1">Computing Nodes Cluster</h2>
+      <p class="text-secondary small mb-0">Inspect logical compute host capacities, real-time core and RAM reservations, and node health.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <button id="btn-refresh-nodes" class="btn btn-sm btn-outline-custom">
+        <i class="bi bi-arrow-clockwise"></i> Refresh
+      </button>
+      <a href="{{ url_for('main.dashboard') }}" class="btn btn-sm btn-outline-custom">
+        <i class="bi bi-speedometer2 me-1"></i> Dashboard
+      </a>
+    </div>
+  </div>
+
+  <!-- Simulated Node Architecture Notice -->
+  <div class="glass-card p-3 mb-4 border-info border-opacity-25" style="background: rgba(6, 182, 212, 0.05);">
+    <div class="d-flex align-items-start gap-3">
+      <div class="rounded-circle bg-info bg-opacity-10 text-info p-2 mt-1">
+        <i class="bi bi-info-circle-fill fs-5"></i>
+      </div>
+      <div>
+        <h6 class="fw-bold text-info mb-1">Simulated Cloud Cluster Architecture</h6>
+        <p class="text-secondary small mb-0">
+          The logical computing nodes (<strong class="text-light">node-alpha</strong>, <strong class="text-light">node-beta</strong>, <strong class="text-light">node-gamma</strong>) model a multi-host distributed cloud cluster with discrete CPU and RAM pools. Container execution is scheduled onto these nodes through transactional best-fit capacity matching (<code class="text-info">SELECT ... FOR UPDATE</code>). To scale beyond this host, computing nodes can point directly to external Docker daemon endpoints (TCP/TLS) or distributed runners.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cluster Aggregates Row -->
+  <div class="row g-3 mb-4" id="cluster-summary-row">
+    <div class="col-md-3">
+      <div class="glass-card p-3">
+        <div class="text-secondary small text-uppercase">Cluster Nodes</div>
+        <div class="fs-3 fw-bold text-light mt-1" id="sum-total-nodes">-</div>
+        <div class="text-success small" id="sum-active-nodes"><i class="bi bi-check-circle me-1"></i> - Active</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="glass-card p-3">
+        <div class="text-secondary small text-uppercase">Cluster CPU Cores</div>
+        <div class="fs-3 fw-bold text-primary mt-1" id="sum-cpu-cores">-</div>
+        <div class="text-secondary small" id="sum-cpu-alloc">- Allocated</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="glass-card p-3">
+        <div class="text-secondary small text-uppercase">Cluster Memory Pool</div>
+        <div class="fs-3 fw-bold text-info mt-1" id="sum-mem-mb">-</div>
+        <div class="text-secondary small" id="sum-mem-alloc">- Allocated</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="glass-card p-3">
+        <div class="text-secondary small text-uppercase">Scheduler Strategy</div>
+        <div class="fs-3 fw-bold text-warning mt-1">Best-Fit</div>
+        <div class="text-secondary small"><i class="bi bi-lock me-1"></i> Row-Locked Safe Allocation</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nodes Detail Grid -->
+  <div class="row g-4" id="nodes-detail-grid">
+    <div class="col-12 text-center py-5 text-muted">
+      <div class="spinner-border text-primary spinner-border-sm me-2"></div> Loading computing node topology...
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  loadNodesData();
+  document.getElementById('btn-refresh-nodes').addEventListener('click', () => {
+    loadNodesData();
+    App.toast('Node status refreshed', 'info');
+  });
+  setInterval(loadNodesData, 5000);
+});
+
+async function loadNodesData() {
+  try {
+    const [summaryRes, nodesRes] = await Promise.all([
+      fetch('/api/nodes/summary'),
+      fetch('/api/nodes')
+    ]);
+
+    if (!summaryRes.ok || !nodesRes.ok) throw new Error('Failed to load nodes');
+    const summary = await summaryRes.json();
+    const nodes = await nodesRes.json();
+
+    renderSummary(summary);
+    renderNodesGrid(nodes);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function renderSummary(s) {
+  document.getElementById('sum-total-nodes').textContent = s.total_nodes || 0;
+  document.getElementById('sum-active-nodes').innerHTML = `<i class="bi bi-check-circle me-1"></i> ${s.active || 0} Active Hosts`;
+  document.getElementById('sum-cpu-cores').textContent = `${s.total_cpu_cores || 0} Cores`;
+  document.getElementById('sum-cpu-alloc').textContent = `${s.allocated_cpu_cores || 0} Cores In Use (${s.cpu_utilization}%)`;
+  document.getElementById('sum-mem-mb').textContent = `${s.total_memory_mb || 0} MB`;
+  document.getElementById('sum-mem-alloc').textContent = `${s.allocated_memory_mb || 0} MB In Use (${s.memory_utilization}%)`;
+}
+
+function renderNodesGrid(nodes) {
+  const container = document.getElementById('nodes-detail-grid');
+  if (nodes.length === 0) {
+    container.innerHTML = '<div class="col-12 text-center py-4 text-muted">No computing nodes registered.</div>';
+    return;
+  }
+
+  container.innerHTML = nodes.map(node => {
+    const isHealthy = node.status === 'active';
+    const statusBadgeClass = isHealthy ? 'bg-success-subtle text-success border border-success border-opacity-25' : 'bg-warning-subtle text-warning border border-warning border-opacity-25';
+
+    return `
+      <div class="col-lg-4">
+        <div class="glass-card p-4 h-100">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="d-flex align-items-center gap-2">
+              <div class="rounded-circle bg-primary bg-opacity-10 text-primary p-2">
+                <i class="bi bi-hdd-network-fill fs-5"></i>
+              </div>
+              <div>
+                <h5 class="fw-bold mb-0 text-light">${node.name}</h5>
+                <span class="text-muted small">${node.is_simulated ? 'Simulated Host' : 'Physical Host'}</span>
+              </div>
+            </div>
+            <span class="badge ${statusBadgeClass} text-uppercase px-2 py-1 rounded-pill">${node.status}</span>
+          </div>
+
+          <!-- CPU Gauge -->
+          <div class="p-3 rounded bg-dark border border-secondary border-opacity-25 mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="text-secondary small fw-semibold">CPU Allocation</span>
+              <span class="badge bg-primary">${node.cpu_utilization}%</span>
+            </div>
+            <div class="d-flex justify-content-between align-items-baseline mb-2">
+              <span class="fs-5 fw-bold text-light">${node.allocated_cpu_cores} / ${node.total_cpu_cores} Cores</span>
+              <span class="text-muted small">${node.available_cpu} Cores Free</span>
+            </div>
+            <div class="progress-dark">
+              <div class="progress-bar-indigo h-100" style="width: ${node.cpu_utilization}%;"></div>
+            </div>
+          </div>
+
+          <!-- Memory Gauge -->
+          <div class="p-3 rounded bg-dark border border-secondary border-opacity-25 mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="text-secondary small fw-semibold">RAM Allocation</span>
+              <span class="badge bg-info">${node.memory_utilization}%</span>
+            </div>
+            <div class="d-flex justify-content-between align-items-baseline mb-2">
+              <span class="fs-5 fw-bold text-light">${node.allocated_memory_mb} / ${node.total_memory_mb} MB</span>
+              <span class="text-muted small">${node.available_memory} MB Free</span>
+            </div>
+            <div class="progress-dark">
+              <div class="progress-bar-cyan h-100" style="width: ${node.memory_utilization}%;"></div>
+            </div>
+          </div>
+
+          <!-- Heartbeat -->
+          <div class="d-flex justify-content-between align-items-center text-muted small pt-2 border-top border-secondary border-opacity-25">
+            <span><i class="bi bi-heart-pulse text-danger me-1"></i> Heartbeat:</span>
+            <span class="text-light">${App.formatDate(node.last_heartbeat)}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+</script>
+{% endblock %}

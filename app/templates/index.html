@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block title %}Cloud Resource & Job Scheduling System - Overview{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <!-- Hero Section -->
+  <div class="row align-items-center py-5">
+    <div class="col-lg-7">
+      <div class="d-inline-flex align-items-center gap-2 px-3 py-1 rounded-pill mb-3 border border-primary border-opacity-25" style="background: rgba(99, 102, 241, 0.1);">
+        <span class="badge bg-primary rounded-pill">v1.0</span>
+        <span class="small text-primary-emphasis fw-medium">Micro Cloud Orchestration & OS Scheduling Simulator</span>
+      </div>
+      <h1 class="display-4 fw-bold mb-3" style="line-height: 1.15;">
+        Intelligent Cloud Workload <br>
+        <span class="navbar-brand-gradient">Resource & Job Scheduling</span>
+      </h1>
+      <p class="lead text-secondary mb-4">
+        A complete cloud management environment that estimates workload requirements, selects optimal computing nodes with capacity constraints, executes workloads safely inside Docker containers, and simulates core OS scheduling algorithms.
+      </p>
+      
+      <div class="d-flex flex-wrap gap-3">
+        {% if current_user.is_authenticated %}
+          <a href="{{ url_for('main.dashboard') }}" class="btn btn-primary-gradient px-4 py-2">
+            <i class="bi bi-speedometer2 me-2"></i> Launch Dashboard
+          </a>
+          <a href="{{ url_for('main.submit_job_page') }}" class="btn btn-outline-custom px-4 py-2">
+            <i class="bi bi-plus-circle me-2"></i> Submit New Job
+          </a>
+        {% else %}
+          <a href="{{ url_for('auth.login') }}" class="btn btn-primary-gradient px-4 py-2">
+            <i class="bi bi-box-arrow-in-right me-2"></i> Sign In to Console
+          </a>
+          <a href="{{ url_for('auth.register') }}" class="btn btn-outline-custom px-4 py-2">
+            <i class="bi bi-person-plus me-2"></i> Create Account
+          </a>
+        {% endif %}
+        <a href="#features" class="btn btn-link text-decoration-none text-secondary d-flex align-items-center">
+          Explore Features <i class="bi bi-arrow-down-short ms-1"></i>
+        </a>
+      </div>
+    </div>
+
+    <div class="col-lg-5 mt-5 mt-lg-0">
+      <div class="glass-card p-4 position-relative">
+        <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom border-secondary border-opacity-25">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-terminal-fill text-info"></i>
+            <span class="fw-semibold small text-uppercase tracking-wider">Live System Architecture</span>
+          </div>
+          <span class="badge bg-success-subtle text-success border border-success border-opacity-25 rounded-pill px-2 py-1 small">
+            <i class="bi bi-circle-fill me-1" style="font-size: 6px;"></i> Operational
+          </span>
+        </div>
+
+        <div class="p-3 rounded mb-3" style="background: rgba(15, 23, 42, 0.6); font-family: var(--font-mono); font-size: 0.8rem;">
+          <div class="text-secondary"># 1. Job Ingestion & Resource Estimation</div>
+          <div class="text-success">&gt; POST /api/jobs [WorkloadType + InputParams]</div>
+          <div class="text-muted small">&gt; Scaled CPU: 1-4 cores | RAM: 128-2048 MB</div>
+          <hr class="border-secondary opacity-25 my-2">
+          <div class="text-secondary"># 2. Concurrency-Safe Node Allocation</div>
+          <div class="text-info">&gt; Best-Fit Query: SELECT ... FOR UPDATE</div>
+          <div class="text-muted small">&gt; Active nodes: node-alpha, beta, gamma</div>
+          <hr class="border-secondary opacity-25 my-2">
+          <div class="text-secondary"># 3. Docker Container Execution</div>
+          <div class="text-warning">&gt; python:3.11 isolated container run</div>
+          <div class="text-muted small">&gt; Captures real stdout, stderr, exit code</div>
+        </div>
+
+        <div class="row g-2 text-center">
+          <div class="col-4">
+            <div class="p-2 rounded bg-dark border border-secondary border-opacity-25">
+              <div class="fw-bold text-primary">4 Nodes</div>
+              <div class="text-muted" style="font-size: 0.7rem;">Simulated Cluster</div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="p-2 rounded bg-dark border border-secondary border-opacity-25">
+              <div class="fw-bold text-info">4 Workloads</div>
+              <div class="text-muted" style="font-size: 0.7rem;">Dockerized Tasks</div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="p-2 rounded bg-dark border border-secondary border-opacity-25">
+              <div class="fw-bold text-success">4 Algorithms</div>
+              <div class="text-muted" style="font-size: 0.7rem;">OS Simulator</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Key Architecture Features -->
+  <div id="features" class="pt-5 mt-4">
+    <div class="text-center mb-5">
+      <h2 class="fw-bold">Engineered for Production Cloud Principles</h2>
+      <p class="text-secondary">Explore the core capabilities of the resource scheduling and execution pipeline.</p>
+    </div>
+
+    <div class="row g-4">
+      <!-- Feature 1 -->
+      <div class="col-md-6 col-lg-3">
+        <div class="glass-card p-4 h-100 glass-card-interactive">
+          <div class="rounded-3 bg-primary bg-opacity-10 text-primary p-3 d-inline-flex mb-3">
+            <i class="bi bi-calculator fs-4"></i>
+          </div>
+          <h5 class="fw-bold mb-2">Dynamic Resource Estimation</h5>
+          <p class="text-secondary small mb-0">
+            Database-driven rules compute exact CPU cores, memory MB, and execution runtime based on real workload input dimensions and scaling multipliers.
+          </p>
+        </div>
+      </div>
+
+      <!-- Feature 2 -->
+      <div class="col-md-6 col-lg-3">
+        <div class="glass-card p-4 h-100 glass-card-interactive">
+          <div class="rounded-3 bg-info bg-opacity-10 text-info p-3 d-inline-flex mb-3">
+            <i class="bi bi-shield-lock fs-4"></i>
+          </div>
+          <h5 class="fw-bold mb-2">Safe Node Allocation</h5>
+          <p class="text-secondary small mb-0">
+            Best-fit algorithm with transactional row-level database locking (<code class="text-info">FOR UPDATE</code>) prevents over-allocation and race conditions under concurrent load.
+          </p>
+        </div>
+      </div>
+
+      <!-- Feature 3 -->
+      <div class="col-md-6 col-lg-3">
+        <div class="glass-card p-4 h-100 glass-card-interactive">
+          <div class="rounded-3 bg-success bg-opacity-10 text-success p-3 d-inline-flex mb-3">
+            <i class="bi bi-box-seam fs-4"></i>
+          </div>
+          <h5 class="fw-bold mb-2">Real Docker Integration</h5>
+          <p class="text-secondary small mb-0">
+            Uses Python Docker SDK to run isolated non-privileged containers with precise CPU shares, memory caps, timeout supervision, and log streaming.
+          </p>
+        </div>
+      </div>
+
+      <!-- Feature 4 -->
+      <div class="col-md-6 col-lg-3">
+        <div class="glass-card p-4 h-100 glass-card-interactive">
+          <div class="rounded-3 bg-warning bg-opacity-10 text-warning p-3 d-inline-flex mb-3">
+            <i class="bi bi-diagram-3 fs-4"></i>
+          </div>
+          <h5 class="fw-bold mb-2">OS Scheduling Simulator</h5>
+          <p class="text-secondary small mb-0">
+            Simulates Round Robin (configurable quantum), FCFS, SJF, and Priority algorithms side-by-side with Gantt charts, waiting and turnaround time metrics.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supported Workloads Section -->
+  <div class="mt-5 pt-4">
+    <div class="glass-card p-4 p-lg-5">
+      <div class="row align-items-center">
+        <div class="col-lg-6 mb-4 mb-lg-0">
+          <span class="badge bg-info-subtle text-info border border-info border-opacity-25 rounded-pill px-3 py-1 mb-2">Supported Workloads</span>
+          <h3 class="fw-bold mb-3">Four Pre-built Docker Workload Containers</h3>
+          <p class="text-secondary">
+            Each workload executes standalone logic inside dedicated containers with clean parameter parsing, resource bounding, and JSON telemetry output.
+          </p>
+          <ul class="list-unstyled d-flex flex-column gap-2 text-secondary small">
+            <li class="d-flex align-items-center gap-2">
+              <i class="bi bi-check-circle-fill text-success"></i>
+              <strong>Image Processing:</strong> Multi-pass blur, sharpen, grayscale, resize, edge detection using Pillow.
+            </li>
+            <li class="d-flex align-items-center gap-2">
+              <i class="bi bi-check-circle-fill text-success"></i>
+              <strong>Data Analysis:</strong> Statistical calculations (mean, median, stdev, quartiles, Pearson correlation).
+            </li>
+            <li class="d-flex align-items-center gap-2">
+              <i class="bi bi-check-circle-fill text-success"></i>
+              <strong>File Processing:</strong> Dynamic document synthesis, word and character frequency NLP analysis.
+            </li>
+            <li class="d-flex align-items-center gap-2">
+              <i class="bi bi-check-circle-fill text-success"></i>
+              <strong>Video Conversion:</strong> Compute-heavy frame generation with zlib stream compression.
+            </li>
+          </ul>
+        </div>
+        <div class="col-lg-6">
+          <div class="card bg-black border-secondary border-opacity-25 shadow p-3">
+            <div class="terminal-header mb-2">
+              <div class="terminal-dots">
+                <span class="terminal-dot-red"></span>
+                <span class="terminal-dot-yellow"></span>
+                <span class="terminal-dot-green"></span>
+              </div>
+              <span class="text-secondary small font-monospace">docker-compose up</span>
+            </div>
+            <pre class="terminal-viewer mb-0" style="height: 180px;">
+[+] Running 4/4
+ &check; Network cloud-scheduler-net       Created
+ &check; Container cloud-scheduler-db       Healthy
+ &check; Container cloud-scheduler-init     Exited (0)
+ &check; Container cloud-scheduler-web      Started [port 5000]
+ &check; Container cloud-scheduler-worker   Started [worker.py]
+ Worker initialized: connected to Docker Engine via /var/run/docker.sock
+ Ready for job ingestion & dynamic scheduling.</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,457 @@
+{% extends "base.html" %}
+
+{% block title %}OS CPU Scheduling Simulator - Cloud Resource & Job Scheduling System{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-lg-4 py-4">
+
+  <!-- Header -->
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+      <h2 class="fw-bold mb-1">OS Scheduling Algorithm Simulator</h2>
+      <p class="text-secondary small mb-0">Evaluate and compare FCFS, SJF, Priority, and Round Robin algorithms against cloud workload job profiles.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('main.dashboard') }}" class="btn btn-sm btn-outline-custom">
+        <i class="bi bi-speedometer2 me-1"></i> Dashboard
+      </a>
+      <a href="{{ url_for('main.submit_job_page') }}" class="btn btn-sm btn-primary-gradient">
+        <i class="bi bi-plus-circle me-1"></i> Submit Workload
+      </a>
+    </div>
+  </div>
+
+  <!-- Mandatory Architectural Distinction Banner -->
+  <div class="glass-card p-3 mb-4 border-warning border-opacity-25" style="background: rgba(245, 158, 11, 0.05);">
+    <div class="d-flex align-items-start gap-3">
+      <div class="rounded-circle bg-warning bg-opacity-10 text-warning p-2 mt-1">
+        <i class="bi bi-shield-exclamation fs-5"></i>
+      </div>
+      <div>
+        <h6 class="fw-bold text-warning mb-1">Theoretical OS Simulation vs Actual Docker Process Execution</h6>
+        <p class="text-secondary small mb-1">
+          This simulator evaluates classic OS CPU scheduling algorithms using jobs' estimated burst times and priorities to compute theoretical ready queues, waiting times, and turnaround times. 
+          <strong>This is strictly distinct from real Docker execution:</strong> actual containers run under Linux kernel Completely Fair Scheduler (CFS) with cgroups resource boundaries managed by our background worker service.
+        </p>
+        <p class="text-muted small mb-0">
+          <i class="bi bi-info-circle me-1"></i> <strong>Resource Safeguards:</strong> Round Robin time slicing addresses starvation but does <em>not</em> prevent deadlock. Deadlock mitigation in our cloud engine relies on atomic two-phase reservation with row locking (<code class="text-info">SELECT ... FOR UPDATE</code>) and pre-execution capacity validation.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Simulator Controls Bar -->
+  <div class="glass-card p-4 mb-4">
+    <div class="row g-3 align-items-center">
+      <div class="col-md-5">
+        <label class="form-label d-flex justify-content-between">
+          <span>Round Robin Time Quantum (&delta;)</span>
+          <span class="text-info fw-semibold" id="quantum-display">100 ms</span>
+        </label>
+        <div class="d-flex align-items-center gap-3">
+          <input type="range" class="form-range" id="time_quantum" min="10" max="500" step="10" value="100">
+          <input type="number" class="form-control form-control-sm text-center" id="time_quantum_num" min="10" max="1000" value="100" style="width: 90px;">
+        </div>
+        <div class="text-muted small mt-1">Smaller quantum enhances responsiveness but increases preemption context switching.</div>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Simulation Dataset</label>
+        <div class="text-secondary small">
+          Uses active submitted cloud jobs (<span id="eligible-jobs-count" class="text-light fw-bold">...</span> jobs found).
+        </div>
+      </div>
+
+      <div class="col-md-3 text-md-end">
+        <button id="btn-run-simulation" class="btn btn-primary-gradient px-4 py-2 w-100">
+          <i class="bi bi-play-fill fs-5 me-1 align-middle"></i> Run Simulation
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Comparison KPI Cards -->
+  <div class="row g-3 mb-4" id="algorithm-kpi-row">
+    <!-- FCFS -->
+    <div class="col-6 col-lg-3">
+      <div class="glass-card p-3 h-100">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <strong class="text-light">FCFS</strong>
+          <span class="badge bg-secondary-subtle text-secondary small">Non-Preemptive</span>
+        </div>
+        <div class="small text-secondary">First Come First Served</div>
+        <div class="mt-2 pt-2 border-top border-secondary border-opacity-25">
+          <div class="d-flex justify-content-between small"><span class="text-muted">Avg Wait:</span> <strong class="text-warning" id="fcfs-avg-wt">-</strong></div>
+          <div class="d-flex justify-content-between small"><span class="text-muted">Avg Turnaround:</span> <strong class="text-info" id="fcfs-avg-tat">-</strong></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SJF -->
+    <div class="col-6 col-lg-3">
+      <div class="glass-card p-3 h-100">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <strong class="text-light">SJF</strong>
+          <span class="badge bg-secondary-subtle text-secondary small">Greedy Optimal</span>
+        </div>
+        <div class="small text-secondary">Shortest Job First</div>
+        <div class="mt-2 pt-2 border-top border-secondary border-opacity-25">
+          <div class="d-flex justify-content-between small"><span class="text-muted">Avg Wait:</span> <strong class="text-warning" id="sjf-avg-wt">-</strong></div>
+          <div class="d-flex justify-content-between small"><span class="text-muted">Avg Turnaround:</span> <strong class="text-info" id="sjf-avg-tat">-</strong></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Priority -->
+    <div class="col-6 col-lg-3">
+      <div class="glass-card p-3 h-100">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <strong class="text-light">Priority</strong>
+          <span class="badge bg-secondary-subtle text-secondary small">Non-Preemptive</span>
+        </div>
+        <div class="small text-secondary">Priority Scheduling (P1 highest)</div>
+        <div class="mt-2 pt-2 border-top border-secondary border-opacity-25">
+          <div class="d-flex justify-content-between small"><span class="text-muted">Avg Wait:</span> <strong class="text-warning" id="pri-avg-wt">-</strong></div>
+          <div class="d-flex justify-content-between small"><span class="text-muted">Avg Turnaround:</span> <strong class="text-info" id="pri-avg-tat">-</strong></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Round Robin -->
+    <div class="col-6 col-lg-3">
+      <div class="glass-card p-3 h-100 border-primary border-opacity-50">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <strong class="text-light">Round Robin</strong>
+          <span class="badge bg-primary-subtle text-primary small">Preemptive</span>
+        </div>
+        <div class="small text-secondary">Time-Sliced Ready Queue</div>
+        <div class="mt-2 pt-2 border-top border-secondary border-opacity-25">
+          <div class="d-flex justify-content-between small"><span class="text-muted">Avg Wait:</span> <strong class="text-warning" id="rr-avg-wt">-</strong></div>
+          <div class="d-flex justify-content-between small"><span class="text-muted">Avg Turnaround:</span> <strong class="text-info" id="rr-avg-tat">-</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Comparison Chart Row -->
+  <div class="row g-4 mb-4">
+    <div class="col-12">
+      <div class="glass-card p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="fw-bold mb-0">Algorithm Efficiency Benchmark</h5>
+          <span class="text-secondary small">Comparison across Average Waiting & Turnaround Times</span>
+        </div>
+        <div style="height: 280px; position: relative;">
+          <canvas id="algoComparisonChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gantt Execution Order Timelines -->
+  <div class="glass-card p-4 mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="fw-bold mb-0">Execution Gantt Timelines (Ready Queue Schedules)</h5>
+      <span class="text-secondary small">Click blocks to inspect job execution time slice</span>
+    </div>
+
+    <div class="d-flex flex-column gap-3" id="timelines-container">
+      <!-- FCFS Timeline -->
+      <div>
+        <div class="d-flex justify-content-between small mb-1">
+          <span class="fw-semibold text-light">1. First Come First Served (FCFS)</span>
+          <span class="text-muted" id="fcfs-span">Makespan: -</span>
+        </div>
+        <div class="timeline-track" id="timeline-fcfs">
+          <div class="text-muted small ps-2">Run simulation to display Gantt schedule</div>
+        </div>
+      </div>
+
+      <!-- SJF Timeline -->
+      <div>
+        <div class="d-flex justify-content-between small mb-1">
+          <span class="fw-semibold text-light">2. Shortest Job First (SJF)</span>
+          <span class="text-muted" id="sjf-span">Makespan: -</span>
+        </div>
+        <div class="timeline-track" id="timeline-sjf">
+          <div class="text-muted small ps-2">Run simulation to display Gantt schedule</div>
+        </div>
+      </div>
+
+      <!-- Priority Timeline -->
+      <div>
+        <div class="d-flex justify-content-between small mb-1">
+          <span class="fw-semibold text-light">3. Priority Scheduling</span>
+          <span class="text-muted" id="pri-span">Makespan: -</span>
+        </div>
+        <div class="timeline-track" id="timeline-priority">
+          <div class="text-muted small ps-2">Run simulation to display Gantt schedule</div>
+        </div>
+      </div>
+
+      <!-- Round Robin Timeline -->
+      <div>
+        <div class="d-flex justify-content-between small mb-1">
+          <span class="fw-semibold text-light">4. Round Robin (Time-Sliced Preemption)</span>
+          <span class="text-muted" id="rr-span">Makespan: -</span>
+        </div>
+        <div class="timeline-track" id="timeline-rr">
+          <div class="text-muted small ps-2">Run simulation to display Gantt schedule</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Per-Job Metric Breakdown Table -->
+  <div class="glass-card p-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="fw-bold mb-0">Per-Job Metrics Breakdown</h5>
+      <select id="breakdown-algo-select" class="form-select form-select-sm bg-dark text-light border-secondary border-opacity-25" style="width: 180px;">
+        <option value="RoundRobin" selected>Round Robin</option>
+        <option value="FCFS">FCFS</option>
+        <option value="SJF">SJF</option>
+        <option value="Priority">Priority</option>
+      </select>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-custom">
+        <thead>
+          <tr>
+            <th>Job ID</th>
+            <th>Burst Time (Est Duration)</th>
+            <th>Waiting Time</th>
+            <th>Turnaround Time</th>
+            <th>Completion Time</th>
+          </tr>
+        </thead>
+        <tbody id="per-job-breakdown-tbody">
+          <tr>
+            <td colspan="5" class="text-center py-3 text-muted">Run simulation to inspect per-job metrics.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let comparisonChart = null;
+let latestSimData = null;
+
+document.addEventListener('DOMContentLoaded', async () => {
+  setupSimulatorControls();
+  await checkJobCount();
+  runSimulation(); // Run initial simulation on page load
+});
+
+function setupSimulatorControls() {
+  const quantumSlider = document.getElementById('time_quantum');
+  const quantumNum = document.getElementById('time_quantum_num');
+  const quantumDisplay = document.getElementById('quantum-display');
+
+  quantumSlider.addEventListener('input', (e) => {
+    quantumNum.value = e.target.value;
+    quantumDisplay.textContent = `${e.target.value} ms`;
+  });
+
+  quantumNum.addEventListener('input', (e) => {
+    quantumSlider.value = e.target.value;
+    quantumDisplay.textContent = `${e.target.value} ms`;
+  });
+
+  document.getElementById('btn-run-simulation').addEventListener('click', runSimulation);
+
+  document.getElementById('breakdown-algo-select').addEventListener('change', (e) => {
+    renderPerJobTable(e.target.value);
+  });
+}
+
+async function checkJobCount() {
+  try {
+    const res = await fetch('/api/jobs?per_page=1');
+    const data = await res.json();
+    document.getElementById('eligible-jobs-count').textContent = data.total || 0;
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function runSimulation() {
+  const btn = document.getElementById('btn-run-simulation');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Simulating...';
+
+  const timeQuantum = parseInt(document.getElementById('time_quantum').value, 10) || 100;
+
+  try {
+    const res = await fetch('/api/scheduling/simulate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ time_quantum: timeQuantum })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Simulation failed');
+
+    latestSimData = data;
+    renderSimulationResults(data);
+    App.toast('Simulation completed for all 4 algorithms!', 'success');
+  } catch (err) {
+    App.toast(err.message, 'warning');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-play-fill fs-5 me-1 align-middle"></i> Run Simulation';
+  }
+}
+
+function renderSimulationResults(data) {
+  const algos = data.algorithms;
+
+  // KPI cards
+  if (algos.FCFS) {
+    document.getElementById('fcfs-avg-wt').textContent = `${algos.FCFS.metrics.avg_waiting_time}s`;
+    document.getElementById('fcfs-avg-tat').textContent = `${algos.FCFS.metrics.avg_turnaround_time}s`;
+    document.getElementById('fcfs-span').textContent = `Makespan: ${algos.FCFS.metrics.total_completion_time}s`;
+    renderGantt('timeline-fcfs', algos.FCFS.execution_order, algos.FCFS.metrics.total_completion_time);
+  }
+  if (algos.SJF) {
+    document.getElementById('sjf-avg-wt').textContent = `${algos.SJF.metrics.avg_waiting_time}s`;
+    document.getElementById('sjf-avg-tat').textContent = `${algos.SJF.metrics.avg_turnaround_time}s`;
+    document.getElementById('sjf-span').textContent = `Makespan: ${algos.SJF.metrics.total_completion_time}s`;
+    renderGantt('timeline-sjf', algos.SJF.execution_order, algos.SJF.metrics.total_completion_time);
+  }
+  if (algos.Priority) {
+    document.getElementById('pri-avg-wt').textContent = `${algos.Priority.metrics.avg_waiting_time}s`;
+    document.getElementById('pri-avg-tat').textContent = `${algos.Priority.metrics.avg_turnaround_time}s`;
+    document.getElementById('pri-span').textContent = `Makespan: ${algos.Priority.metrics.total_completion_time}s`;
+    renderGantt('timeline-priority', algos.Priority.execution_order, algos.Priority.metrics.total_completion_time);
+  }
+  if (algos.RoundRobin) {
+    document.getElementById('rr-avg-wt').textContent = `${algos.RoundRobin.metrics.avg_waiting_time}s`;
+    document.getElementById('rr-avg-tat').textContent = `${algos.RoundRobin.metrics.avg_turnaround_time}s`;
+    document.getElementById('rr-span').textContent = `Makespan: ${algos.RoundRobin.metrics.total_completion_time}s`;
+    renderGantt('timeline-rr', algos.RoundRobin.execution_order, algos.RoundRobin.metrics.total_completion_time);
+  }
+
+  // Render Bar Chart
+  renderComparisonChart(algos);
+
+  // Render Breakdown Table
+  const currentAlgo = document.getElementById('breakdown-algo-select').value;
+  renderPerJobTable(currentAlgo);
+}
+
+function renderGantt(containerId, executionOrder, totalTime) {
+  const container = document.getElementById(containerId);
+  if (!container || !executionOrder || executionOrder.length === 0) return;
+
+  const colors = [
+    '#6366f1', '#06b6d4', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#3b82f6', '#14b8a6'
+  ];
+
+  container.innerHTML = executionOrder.map(step => {
+    const duration = step.burst;
+    const pct = totalTime > 0 ? (duration / totalTime) * 100 : 10;
+    const color = colors[step.job_id % colors.length];
+    return `
+      <div class="timeline-block" 
+           style="width: ${Math.max(pct, 4)}%; background: ${color};" 
+           title="Job #${step.job_id} (${step.start}s - ${step.end}s, burst: ${step.burst}s)">
+        J#${step.job_id} (${duration}s)
+      </div>
+    `;
+  }).join('');
+}
+
+function renderComparisonChart(algos) {
+  const ctx = document.getElementById('algoComparisonChart');
+  if (!ctx) return;
+
+  const labels = ['FCFS', 'SJF', 'Priority', 'Round Robin'];
+  const avgWait = [
+    algos.FCFS ? algos.FCFS.metrics.avg_waiting_time : 0,
+    algos.SJF ? algos.SJF.metrics.avg_waiting_time : 0,
+    algos.Priority ? algos.Priority.metrics.avg_waiting_time : 0,
+    algos.RoundRobin ? algos.RoundRobin.metrics.avg_waiting_time : 0
+  ];
+  const avgTat = [
+    algos.FCFS ? algos.FCFS.metrics.avg_turnaround_time : 0,
+    algos.SJF ? algos.SJF.metrics.avg_turnaround_time : 0,
+    algos.Priority ? algos.Priority.metrics.avg_turnaround_time : 0,
+    algos.RoundRobin ? algos.RoundRobin.metrics.avg_turnaround_time : 0
+  ];
+
+  if (!comparisonChart) {
+    comparisonChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'Avg Waiting Time (s)',
+            data: avgWait,
+            backgroundColor: '#f59e0b',
+            borderRadius: 6
+          },
+          {
+            label: 'Avg Turnaround Time (s)',
+            data: avgTat,
+            backgroundColor: '#06b6d4',
+            borderRadius: 6
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            beginAtZero: true,
+            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+            ticks: { color: '#94a3b8', callback: v => `${v}s` }
+          },
+          x: {
+            grid: { display: false },
+            ticks: { color: '#f8fafc', font: { weight: '600' } }
+          }
+        },
+        plugins: {
+          legend: {
+            labels: { color: '#94a3b8', font: { family: 'Plus Jakarta Sans', size: 12 } }
+          }
+        }
+      }
+    });
+  } else {
+    comparisonChart.data.datasets[0].data = avgWait;
+    comparisonChart.data.datasets[1].data = avgTat;
+    comparisonChart.update();
+  }
+}
+
+function renderPerJobTable(algoName) {
+  const tbody = document.getElementById('per-job-breakdown-tbody');
+  if (!tbody || !latestSimData || !latestSimData.algorithms[algoName]) return;
+
+  const perJob = latestSimData.algorithms[algoName].metrics.per_job || [];
+  if (perJob.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-muted">No jobs evaluated.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = perJob.map(p => `
+    <tr>
+      <td class="font-monospace fw-semibold text-light">#${p.job_id}</td>
+      <td class="text-light">${(p.turnaround_time - p.waiting_time)}s</td>
+      <td class="text-warning fw-semibold">${p.waiting_time}s</td>
+      <td class="text-info fw-semibold">${p.turnaround_time}s</td>
+      <td class="text-success fw-semibold">${p.completion_time}s</td>
+    </tr>
+  `).join('');
+}
+</script>
+{% endblock %}

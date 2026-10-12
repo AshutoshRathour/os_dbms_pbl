@@ -1,0 +1,391 @@
+{% extends "base.html" %}
+
+{% block title %}Submit Workload Job - Cloud Resource & Job Scheduling System{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-10">
+
+      <div class="d-flex align-items-center justify-content-between mb-4">
+        <div>
+          <h2 class="fw-bold mb-1">Submit Cloud Workload</h2>
+          <p class="text-secondary small mb-0">Select a workload type, configure safe parameters, and preview dynamic resource estimation.</p>
+        </div>
+        <a href="{{ url_for('main.jobs_page') }}" class="btn btn-sm btn-outline-custom">
+          <i class="bi bi-stack me-1"></i> View Queue
+        </a>
+      </div>
+
+      <div class="row g-4">
+        <!-- Form Column -->
+        <div class="col-lg-7">
+          <div class="glass-card p-4">
+            <form id="job-submit-form">
+              <!-- Workload Type Selection -->
+              <div class="mb-4">
+                <label class="form-label d-flex justify-content-between">
+                  <span>Workload Category</span>
+                  <span class="text-muted small">Dockerized Workload Type</span>
+                </label>
+                <select id="workload_type_id" class="form-select bg-dark text-light border-secondary border-opacity-25 py-2" required>
+                  <option value="" disabled selected>Loading workload types...</option>
+                </select>
+                <div id="workload-description" class="text-secondary small mt-2 fst-italic"></div>
+              </div>
+
+              <!-- Dynamic Parameters Container -->
+              <div id="dynamic-params-container" class="p-3 rounded bg-dark border border-secondary border-opacity-25 mb-4">
+                <h6 class="fw-bold text-info mb-3 d-flex align-items-center gap-2">
+                  <i class="bi bi-sliders"></i> Workload Parameters
+                </h6>
+
+                <!-- Image Processing Params -->
+                <div id="params-image" class="workload-params-group" style="display: none;">
+                  <div class="mb-3">
+                    <label class="form-label">Image Filter Operation</label>
+                    <select id="img_operation" class="form-select">
+                      <option value="blur" selected>Gaussian Blur (Multi-pass)</option>
+                      <option value="sharpen">Sharpen & Detail Enhance</option>
+                      <option value="grayscale">Grayscale Conversion</option>
+                      <option value="resize">Dual-pass Bilinear Resize</option>
+                      <option value="edge_detect">Edge Detection & Contour</option>
+                    </select>
+                  </div>
+                  <div class="mb-2">
+                    <label class="form-label d-flex justify-content-between">
+                      <span>Image Dimension (Resolution)</span>
+                      <span class="text-info fw-semibold" id="img_size_val">512 &times; 512 px</span>
+                    </label>
+                    <input type="range" class="form-range" id="img_size" min="128" max="2048" step="128" value="512">
+                  </div>
+                </div>
+
+                <!-- Data Analysis Params -->
+                <div id="params-data" class="workload-params-group" style="display: none;">
+                  <div class="mb-2">
+                    <label class="form-label d-flex justify-content-between">
+                      <span>Dataset Row Count</span>
+                      <span class="text-info fw-semibold" id="data_rows_val">10,000 rows</span>
+                    </label>
+                    <input type="range" class="form-range" id="data_rows" min="1000" max="100000" step="1000" value="10000">
+                    <div class="text-muted small">Generates synthetic multi-column distributions & calculates correlation matrices.</div>
+                  </div>
+                </div>
+
+                <!-- File Processing Params -->
+                <div id="params-file" class="workload-params-group" style="display: none;">
+                  <div class="mb-2">
+                    <label class="form-label d-flex justify-content-between">
+                      <span>Synthetic Document Size</span>
+                      <span class="text-info fw-semibold" id="file_size_val">250 KB</span>
+                    </label>
+                    <input type="range" class="form-range" id="file_size_kb" min="50" max="2000" step="50" value="250">
+                    <div class="text-muted small">Performs full text parsing, n-gram frequencies, and sentence metrics.</div>
+                  </div>
+                </div>
+
+                <!-- Video Conversion Params -->
+                <div id="params-video" class="workload-params-group" style="display: none;">
+                  <div class="mb-2">
+                    <label class="form-label d-flex justify-content-between">
+                      <span>Simulated Video Duration</span>
+                      <span class="text-info fw-semibold" id="video_duration_val">8 seconds</span>
+                    </label>
+                    <input type="range" class="form-range" id="video_duration" min="2" max="30" step="1" value="8">
+                    <div class="text-muted small">Synthesizes 24 fps raw frames and performs stream zlib encoding.</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Priority Selection -->
+              <div class="mb-4">
+                <label class="form-label d-flex justify-content-between">
+                  <span>Job Scheduling Priority</span>
+                  <span id="priority-label" class="badge bg-info">P5 · Normal Priority</span>
+                </label>
+                <input type="range" class="form-range" id="job_priority" min="1" max="10" step="1" value="5">
+                <div class="d-flex justify-content-between text-muted small">
+                  <span>1 (Critical / High)</span>
+                  <span>5 (Standard)</span>
+                  <span>10 (Low / Background)</span>
+                </div>
+              </div>
+
+              <!-- Submit Button -->
+              <button type="submit" id="btn-submit-job" class="btn btn-primary-gradient w-100 py-2 fs-6">
+                <i class="bi bi-rocket-takeoff-fill me-2"></i> Submit Job to Cloud Queue
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Resource Estimation Preview Column -->
+        <div class="col-lg-5">
+          <div class="glass-card p-4 position-sticky" style="top: 100px;">
+            <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom border-secondary border-opacity-25">
+              <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-calculator-fill text-primary"></i>
+                <h6 class="fw-bold mb-0">Dynamic Estimation Engine</h6>
+              </div>
+              <span class="badge bg-primary-subtle text-primary border border-primary border-opacity-25 rounded-pill small">Calculated</span>
+            </div>
+
+            <p class="text-secondary small mb-3">
+              Resource requirements are calculated dynamically using active database scaling factors before assigning to an eligible node.
+            </p>
+
+            <!-- Est CPU -->
+            <div class="p-3 rounded bg-dark border border-secondary border-opacity-25 mb-3">
+              <div class="d-flex justify-content-between align-items-center">
+                <div>
+                  <div class="text-secondary small">Estimated CPU Allocation</div>
+                  <div class="fs-4 fw-bold text-light" id="preview-cpu">1 Core</div>
+                </div>
+                <div class="rounded-circle bg-primary bg-opacity-10 text-primary p-3">
+                  <i class="bi bi-cpu fs-4"></i>
+                </div>
+              </div>
+            </div>
+
+            <!-- Est Memory -->
+            <div class="p-3 rounded bg-dark border border-secondary border-opacity-25 mb-3">
+              <div class="d-flex justify-content-between align-items-center">
+                <div>
+                  <div class="text-secondary small">Estimated Memory Limit</div>
+                  <div class="fs-4 fw-bold text-info" id="preview-mem">256 MB</div>
+                </div>
+                <div class="rounded-circle bg-info bg-opacity-10 text-info p-3">
+                  <i class="bi bi-memory fs-4"></i>
+                </div>
+              </div>
+            </div>
+
+            <!-- Est Duration -->
+            <div class="p-3 rounded bg-dark border border-secondary border-opacity-25 mb-3">
+              <div class="d-flex justify-content-between align-items-center">
+                <div>
+                  <div class="text-secondary small">Estimated Execution Time</div>
+                  <div class="fs-4 fw-bold text-warning" id="preview-time">30s</div>
+                </div>
+                <div class="rounded-circle bg-warning bg-opacity-10 text-warning p-3">
+                  <i class="bi bi-stopwatch fs-4"></i>
+                </div>
+              </div>
+            </div>
+
+            <div class="text-secondary small" style="font-size: 0.78rem;">
+              <i class="bi bi-info-circle text-info me-1"></i>
+              Jobs are assigned via best-fit node scheduling. When no node has capacity, jobs wait in the ready queue.
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let workloadTypes = [];
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadWorkloadTypes();
+  setupEventListeners();
+  updateEstimationPreview();
+});
+
+async function loadWorkloadTypes() {
+  try {
+    const res = await fetch('/api/jobs/workload-types');
+    if (!res.ok) throw new Error('Failed to load workload types');
+    workloadTypes = await res.json();
+
+    const select = document.getElementById('workload_type_id');
+    select.innerHTML = workloadTypes.map(wt => 
+      `<option value="${wt.id}">${wt.name}</option>`
+    ).join('');
+
+    if (workloadTypes.length > 0) {
+      select.value = workloadTypes[0].id;
+      showParamsForWorkload(workloadTypes[0].name);
+    }
+  } catch (err) {
+    App.toast('Error fetching workload definitions: ' + err.message, 'danger');
+  }
+}
+
+function showParamsForWorkload(name) {
+  document.querySelectorAll('.workload-params-group').forEach(el => el.style.display = 'none');
+  const descEl = document.getElementById('workload-description');
+
+  const currentWt = workloadTypes.find(w => w.name === name);
+  if (currentWt && descEl) {
+    descEl.textContent = currentWt.description;
+  }
+
+  if (name === 'Image Processing') {
+    document.getElementById('params-image').style.display = 'block';
+  } else if (name === 'Data Analysis') {
+    document.getElementById('params-data').style.display = 'block';
+  } else if (name === 'File Processing') {
+    document.getElementById('params-file').style.display = 'block';
+  } else if (name === 'Video Conversion') {
+    document.getElementById('params-video').style.display = 'block';
+  }
+  updateEstimationPreview();
+}
+
+function setupEventListeners() {
+  const select = document.getElementById('workload_type_id');
+  select.addEventListener('change', (e) => {
+    const wt = workloadTypes.find(w => w.id == e.target.value);
+    if (wt) showParamsForWorkload(wt.name);
+  });
+
+  // Sliders display updating
+  const imgSize = document.getElementById('img_size');
+  imgSize.addEventListener('input', (e) => {
+    document.getElementById('img_size_val').innerHTML = `${e.target.value} &times; ${e.target.value} px`;
+    updateEstimationPreview();
+  });
+
+  const dataRows = document.getElementById('data_rows');
+  dataRows.addEventListener('input', (e) => {
+    document.getElementById('data_rows_val').textContent = `${parseInt(e.target.value).toLocaleString()} rows`;
+    updateEstimationPreview();
+  });
+
+  const fileSize = document.getElementById('file_size_kb');
+  fileSize.addEventListener('input', (e) => {
+    document.getElementById('file_size_val').textContent = `${e.target.value} KB`;
+    updateEstimationPreview();
+  });
+
+  const videoDur = document.getElementById('video_duration');
+  videoDur.addEventListener('input', (e) => {
+    document.getElementById('video_duration_val').textContent = `${e.target.value} seconds`;
+    updateEstimationPreview();
+  });
+
+  const prioritySlider = document.getElementById('job_priority');
+  prioritySlider.addEventListener('input', (e) => {
+    const val = parseInt(e.target.value);
+    let label = 'Normal';
+    let cls = 'bg-info';
+    if (val <= 2) { label = 'Critical'; cls = 'bg-danger'; }
+    else if (val <= 4) { label = 'High'; cls = 'bg-warning text-dark'; }
+    else if (val <= 7) { label = 'Normal'; cls = 'bg-info'; }
+    else { label = 'Low'; cls = 'bg-secondary'; }
+    const pLabel = document.getElementById('priority-label');
+    pLabel.className = `badge ${cls}`;
+    pLabel.textContent = `P${val} · ${label} Priority`;
+  });
+
+  // Submit Handler
+  document.getElementById('job-submit-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await handleJobSubmit();
+  });
+}
+
+function getCurrentInputParams(workloadName) {
+  if (workloadName === 'Image Processing') {
+    return {
+      operation: document.getElementById('img_operation').value,
+      size: parseInt(document.getElementById('img_size').value, 10)
+    };
+  } else if (workloadName === 'Data Analysis') {
+    return {
+      rows: parseInt(document.getElementById('data_rows').value, 10)
+    };
+  } else if (workloadName === 'File Processing') {
+    return {
+      size_kb: parseInt(document.getElementById('file_size_kb').value, 10)
+    };
+  } else if (workloadName === 'Video Conversion') {
+    return {
+      duration_seconds: parseInt(document.getElementById('video_duration').value, 10)
+    };
+  }
+  return {};
+}
+
+function updateEstimationPreview() {
+  const select = document.getElementById('workload_type_id');
+  const wtId = select.value;
+  const wt = workloadTypes.find(w => w.id == wtId);
+  if (!wt) return;
+
+  const params = getCurrentInputParams(wt.name);
+  let sizeFactor = 1.0;
+
+  if (wt.name === 'Image Processing') {
+    const size = params.size || 512;
+    sizeFactor = Math.max(1.0, Math.pow(size / 512, 2));
+  } else if (wt.name === 'Data Analysis') {
+    const rows = params.rows || 1000;
+    sizeFactor = Math.max(1.0, rows / 1000);
+  } else if (wt.name === 'File Processing') {
+    const sizeKb = params.size_kb || 100;
+    sizeFactor = Math.max(1.0, sizeKb / 100);
+  } else if (wt.name === 'Video Conversion') {
+    const dur = params.duration_seconds || 5;
+    sizeFactor = Math.max(1.0, dur / 5);
+  }
+
+  const estCpu = Math.max(1, Math.ceil(wt.est_cpu_cores * (wt.cpu_scale_factor || 1.0) * sizeFactor));
+  const estMem = Math.max(64, Math.ceil(wt.est_memory_mb * (wt.memory_scale_factor || 1.0) * sizeFactor));
+  const estTime = Math.max(5, Math.ceil(wt.est_time_seconds * (wt.time_scale_factor || 1.0) * sizeFactor));
+
+  document.getElementById('preview-cpu').textContent = `${estCpu} ${estCpu === 1 ? 'Core' : 'Cores'}`;
+  document.getElementById('preview-mem').textContent = `${estMem} MB`;
+  document.getElementById('preview-time').textContent = `${estTime}s`;
+}
+
+async function handleJobSubmit() {
+  const submitBtn = document.getElementById('btn-submit-job');
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Submitting Job...';
+
+  try {
+    const select = document.getElementById('workload_type_id');
+    const wtId = parseInt(select.value, 10);
+    const wt = workloadTypes.find(w => w.id === wtId);
+    const params = getCurrentInputParams(wt ? wt.name : '');
+    const priority = parseInt(document.getElementById('job_priority').value, 10);
+
+    const payload = {
+      workload_type_id: wtId,
+      input_params: params,
+      priority: priority
+    };
+
+    const res = await fetch('/api/jobs', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Job submission failed');
+    }
+
+    App.toast(`Job #${data.id} submitted successfully! Redirecting...`, 'success');
+    setTimeout(() => {
+      window.location.href = `/jobs/${data.id}`;
+    }, 1200);
+
+  } catch (err) {
+    App.toast(err.message, 'danger');
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<i class="bi bi-rocket-takeoff-fill me-2"></i> Submit Job to Cloud Queue';
+  }
+}
+</script>
+{% endblock %}

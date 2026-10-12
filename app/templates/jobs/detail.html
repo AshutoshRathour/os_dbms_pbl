@@ -1,0 +1,354 @@
+{% extends "base.html" %}
+
+{% block title %}Job #{{ job_id }} Inspection - Cloud Resource & Job Scheduling System{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+  <!-- Header -->
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div class="d-flex align-items-center gap-3">
+      <a href="{{ url_for('main.jobs_page') }}" class="btn btn-sm btn-outline-custom">
+        <i class="bi bi-arrow-left"></i>
+      </a>
+      <div>
+        <div class="d-flex align-items-center gap-2 mb-1">
+          <h2 class="fw-bold mb-0">Job #{{ job_id }}</h2>
+          <span id="job-status-badge"></span>
+          <span id="job-priority-badge"></span>
+        </div>
+        <p class="text-secondary small mb-0" id="job-sub-header">Loading execution telemetry...</p>
+      </div>
+    </div>
+
+    <div class="d-flex gap-2">
+      <button id="btn-refresh-detail" class="btn btn-sm btn-outline-custom">
+        <i class="bi bi-arrow-clockwise"></i> Refresh
+      </button>
+      <a href="{{ url_for('main.submit_job_page') }}" class="btn btn-sm btn-primary-gradient">
+        <i class="bi bi-plus-circle me-1"></i> New Job
+      </a>
+    </div>
+  </div>
+
+  <!-- Execution Lifecycle Timeline -->
+  <div class="glass-card p-4 mb-4">
+    <h6 class="fw-bold text-secondary text-uppercase small mb-3">Execution Lifecycle State</h6>
+    <div class="row text-center g-2" id="lifecycle-stepper">
+      <div class="col-3">
+        <div class="p-3 rounded bg-dark border border-secondary border-opacity-25" id="step-queued">
+          <i class="bi bi-hourglass-top fs-4 text-warning mb-1 d-block"></i>
+          <strong class="d-block text-light small">1. Queued</strong>
+          <span class="text-muted" style="font-size: 0.7rem;" id="step-queued-time">-</span>
+        </div>
+      </div>
+      <div class="col-3">
+        <div class="p-3 rounded bg-dark border border-secondary border-opacity-25" id="step-assigned">
+          <i class="bi bi-hdd-network fs-4 text-secondary mb-1 d-block"></i>
+          <strong class="d-block text-light small">2. Node Assigned</strong>
+          <span class="text-muted" style="font-size: 0.7rem;" id="step-assigned-time">-</span>
+        </div>
+      </div>
+      <div class="col-3">
+        <div class="p-3 rounded bg-dark border border-secondary border-opacity-25" id="step-running">
+          <i class="bi bi-box-seam fs-4 text-secondary mb-1 d-block"></i>
+          <strong class="d-block text-light small">3. Container Run</strong>
+          <span class="text-muted" style="font-size: 0.7rem;" id="step-running-time">-</span>
+        </div>
+      </div>
+      <div class="col-3">
+        <div class="p-3 rounded bg-dark border border-secondary border-opacity-25" id="step-completed">
+          <i class="bi bi-flag fs-4 text-secondary mb-1 d-block"></i>
+          <strong class="d-block text-light small">4. Termination</strong>
+          <span class="text-muted" style="font-size: 0.7rem;" id="step-completed-time">-</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Resource Comparison Row (Estimated vs Measured) -->
+  <div class="row g-4 mb-4">
+    <!-- Comparison Metrics -->
+    <div class="col-lg-7">
+      <div class="glass-card p-4 h-100">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="fw-bold mb-0">Resource Allocation & Performance</h5>
+          <span class="badge bg-info-subtle text-info border border-info border-opacity-25">Estimated vs Measured</span>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-custom">
+            <thead>
+              <tr>
+                <th>Resource Metric</th>
+                <th>Estimated Rule Value</th>
+                <th>Actual Measured Value</th>
+                <th>Variance / Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="fw-semibold text-light">
+                  <i class="bi bi-cpu text-primary me-2"></i> CPU Cores
+                </td>
+                <td id="res-est-cpu">-</td>
+                <td id="res-act-cpu" class="fw-bold text-light">-</td>
+                <td><span class="badge bg-secondary-subtle text-secondary" id="res-cpu-var">Enforced Cap</span></td>
+              </tr>
+              <tr>
+                <td class="fw-semibold text-light">
+                  <i class="bi bi-memory text-info me-2"></i> Memory Limit
+                </td>
+                <td id="res-est-mem">-</td>
+                <td id="res-act-mem" class="fw-bold text-light">-</td>
+                <td><span class="badge bg-secondary-subtle text-secondary" id="res-mem-var">Enforced Cap</span></td>
+              </tr>
+              <tr>
+                <td class="fw-semibold text-light">
+                  <i class="bi bi-stopwatch text-warning me-2"></i> Execution Duration
+                </td>
+                <td id="res-est-time">-</td>
+                <td id="res-act-time" class="fw-bold text-info">-</td>
+                <td><span class="badge bg-info-subtle text-info" id="res-time-var">-</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Input Parameters Card -->
+        <div class="mt-3">
+          <h6 class="fw-bold text-secondary text-uppercase small mb-2">Input Parameters (Validated)</h6>
+          <pre class="p-3 rounded bg-dark border border-secondary border-opacity-25 font-monospace small mb-0" id="input-params-json" style="max-height: 120px; overflow-y: auto;">{}</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Node & Container Metadata -->
+    <div class="col-lg-5">
+      <div class="glass-card p-4 h-100">
+        <h5 class="fw-bold mb-3">Container & Node Metadata</h5>
+
+        <div class="d-flex flex-column gap-3">
+          <!-- Node -->
+          <div class="p-3 rounded bg-dark border border-secondary border-opacity-25">
+            <div class="text-secondary small">Assigned Computing Node</div>
+            <div class="fw-bold text-light fs-5 mt-1" id="meta-node-name">Awaiting Node Selection...</div>
+            <div class="text-muted small mt-1" id="meta-node-sim">Simulated Cloud Node</div>
+          </div>
+
+          <!-- Container ID -->
+          <div class="p-3 rounded bg-dark border border-secondary border-opacity-25">
+            <div class="d-flex justify-content-between align-items-center">
+              <span class="text-secondary small">Docker Container ID</span>
+              <button class="btn btn-sm btn-link text-info text-decoration-none p-0 small" onclick="copyContainerId()">
+                <i class="bi bi-clipboard me-1"></i> Copy
+              </button>
+            </div>
+            <div class="font-monospace text-light small mt-1 text-truncate" id="meta-container-id">Not yet created</div>
+          </div>
+
+          <!-- Exit Code -->
+          <div class="p-3 rounded bg-dark border border-secondary border-opacity-25">
+            <div class="text-secondary small">Process Exit Status</div>
+            <div class="mt-1" id="meta-exit-code"><span class="badge bg-secondary">Pending</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Terminal Output Logs -->
+  <div class="row g-4">
+    <!-- stdout -->
+    <div class="col-lg-8">
+      <div class="glass-card p-4">
+        <div class="terminal-header">
+          <div class="terminal-dots">
+            <span class="terminal-dot-red"></span>
+            <span class="terminal-dot-yellow"></span>
+            <span class="terminal-dot-green"></span>
+          </div>
+          <span class="text-secondary small font-monospace">Container Standard Output (stdout)</span>
+          <button class="btn btn-sm btn-outline-custom py-0 px-2 small" onclick="copyStdout()">
+            <i class="bi bi-clipboard"></i>
+          </button>
+        </div>
+        <pre class="terminal-viewer mb-0" id="terminal-stdout">Waiting for container execution logs...</pre>
+      </div>
+    </div>
+
+    <!-- stderr -->
+    <div class="col-lg-4">
+      <div class="glass-card p-4">
+        <div class="terminal-header">
+          <div class="terminal-dots">
+            <span class="terminal-dot-red"></span>
+            <span class="terminal-dot-yellow"></span>
+            <span class="terminal-dot-green"></span>
+          </div>
+          <span class="text-secondary small font-monospace">Standard Error (stderr)</span>
+        </div>
+        <pre class="terminal-viewer mb-0 text-danger" id="terminal-stderr" style="color: #f87171 !important;">No errors reported.</pre>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const jobId = {{ job_id }};
+let pollTimer = null;
+let currentJob = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+  fetchJobDetail();
+  pollTimer = setInterval(fetchJobDetail, 3000);
+
+  document.getElementById('btn-refresh-detail').addEventListener('click', () => {
+    fetchJobDetail();
+    App.toast('Telemetry refreshed', 'info');
+  });
+});
+
+async function fetchJobDetail() {
+  try {
+    const res = await fetch(`/api/jobs/${jobId}`);
+    if (!res.ok) {
+      if (res.status === 404) {
+        document.getElementById('job-sub-header').textContent = 'Job not found';
+        clearInterval(pollTimer);
+        return;
+      }
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const job = await res.json();
+    currentJob = job;
+    renderJobDetail(job);
+
+    // If job finished, slow down polling
+    if (job.status === 'completed' || job.status === 'failed') {
+      clearInterval(pollTimer);
+      pollTimer = setInterval(fetchJobDetail, 10000);
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function renderJobDetail(job) {
+  document.getElementById('job-status-badge').innerHTML = App.renderStatusBadge(job.status);
+  document.getElementById('job-priority-badge').innerHTML = App.renderPriorityBadge(job.priority);
+  document.getElementById('job-sub-header').textContent = `Workload: ${job.workload_name || 'Generic'} • Submitted by ${job.username || 'user'} at ${App.formatDate(job.created_at)}`;
+
+  // Stepper highlights
+  updateStepper(job);
+
+  // Resource Comparison
+  document.getElementById('res-est-cpu').textContent = `${job.est_cpu_cores} Cores`;
+  document.getElementById('res-est-mem').textContent = `${job.est_memory_mb} MB`;
+  document.getElementById('res-est-time').textContent = `${job.est_time_seconds}s`;
+
+  const assignment = job.assignment;
+  if (assignment) {
+    document.getElementById('res-act-cpu').textContent = assignment.actual_cpu_used ? `${assignment.actual_cpu_used} Cores` : '-';
+    document.getElementById('res-act-mem').textContent = assignment.actual_memory_used_mb ? `${assignment.actual_memory_used_mb} MB` : '-';
+
+    if (assignment.actual_duration_seconds !== null && assignment.actual_duration_seconds !== undefined) {
+      const act = assignment.actual_duration_seconds;
+      document.getElementById('res-act-time').textContent = `${act.toFixed(2)}s`;
+      const diff = act - (job.est_time_seconds || 0);
+      const diffStr = diff >= 0 ? `+${diff.toFixed(1)}s` : `${diff.toFixed(1)}s`;
+      document.getElementById('res-time-var').textContent = `${diffStr} vs estimate`;
+    }
+
+    document.getElementById('meta-node-name').textContent = assignment.node_name || 'Assigned';
+    document.getElementById('meta-container-id').textContent = assignment.container_id || 'Pending initialization';
+
+    if (assignment.exit_code !== null && assignment.exit_code !== undefined) {
+      if (assignment.exit_code === 0) {
+        document.getElementById('meta-exit-code').innerHTML = '<span class="badge bg-success fs-6">Exit Code 0 (Success)</span>';
+      } else {
+        document.getElementById('meta-exit-code').innerHTML = `<span class="badge bg-danger fs-6">Exit Code ${assignment.exit_code} (Failed)</span>`;
+      }
+    }
+
+    // Terminal Logs
+    if (assignment.stdout) {
+      document.getElementById('terminal-stdout').textContent = assignment.stdout;
+    } else if (job.status === 'running') {
+      document.getElementById('terminal-stdout').textContent = '[Worker] Container is executing inside Docker Engine... Streaming logs...';
+    } else {
+      document.getElementById('terminal-stdout').textContent = 'No standard output produced.';
+    }
+
+    if (assignment.stderr) {
+      document.getElementById('terminal-stderr').textContent = assignment.stderr;
+    } else {
+      document.getElementById('terminal-stderr').textContent = 'No errors reported.';
+    }
+  }
+
+  // Input Params
+  document.getElementById('input-params-json').textContent = JSON.stringify(job.input_params || {}, null, 2);
+}
+
+function updateStepper(job) {
+  const s = job.status;
+  const a = job.assignment;
+
+  // Queued
+  const stepQ = document.getElementById('step-queued');
+  stepQ.className = 'p-3 rounded bg-dark border border-warning border-opacity-50';
+  document.getElementById('step-queued-time').textContent = App.formatDate(job.created_at);
+
+  // Assigned
+  const stepA = document.getElementById('step-assigned');
+  if (s !== 'queued' && a) {
+    stepA.className = 'p-3 rounded bg-dark border border-primary border-opacity-50';
+    stepA.querySelector('i').className = 'bi bi-hdd-network-fill fs-4 text-primary mb-1 d-block';
+    document.getElementById('step-assigned-time').textContent = App.formatDate(a.assigned_at);
+  }
+
+  // Running
+  const stepR = document.getElementById('step-running');
+  if (s === 'running' || s === 'completed' || s === 'failed') {
+    stepR.className = 'p-3 rounded bg-dark border border-info border-opacity-50';
+    stepR.querySelector('i').className = 'bi bi-box-seam-fill fs-4 text-info mb-1 d-block';
+    if (a && a.started_at) {
+      document.getElementById('step-running-time').textContent = App.formatDate(a.started_at);
+    }
+  }
+
+  // Completed / Failed
+  const stepC = document.getElementById('step-completed');
+  if (s === 'completed') {
+    stepC.className = 'p-3 rounded bg-dark border border-success border-opacity-50';
+    stepC.querySelector('i').className = 'bi bi-check-circle-fill fs-4 text-success mb-1 d-block';
+    stepC.querySelector('strong').textContent = '4. Completed';
+    if (a && a.completed_at) {
+      document.getElementById('step-completed-time').textContent = App.formatDate(a.completed_at);
+    }
+  } else if (s === 'failed') {
+    stepC.className = 'p-3 rounded bg-dark border border-danger border-opacity-50';
+    stepC.querySelector('i').className = 'bi bi-x-circle-fill fs-4 text-danger mb-1 d-block';
+    stepC.querySelector('strong').textContent = '4. Failed';
+    if (a && a.completed_at) {
+      document.getElementById('step-completed-time').textContent = App.formatDate(a.completed_at);
+    }
+  }
+}
+
+function copyContainerId() {
+  if (currentJob && currentJob.assignment && currentJob.assignment.container_id) {
+    App.copyToClipboard(currentJob.assignment.container_id, 'Container ID copied!');
+  }
+}
+
+function copyStdout() {
+  const text = document.getElementById('terminal-stdout').textContent;
+  App.copyToClipboard(text, 'Terminal stdout copied!');
+}
+</script>
+{% endblock %}
